@@ -15,6 +15,8 @@ By invoking the I<file-chooser:choose> action, the scrollback buffer is scanned 
 paths to files and a list is presented with the result.
 This list can be navigated and the application specified by the
 I<file-chooser.launcher> resource is used to open the desired file.
+Since scanning for files in the whole scrollback buffer would take a long time, if
+the buffer is big, only the most recent screen is scanned.
 
 The scanner does not only recognize paths to files, but also those, which have a
 line and column as suffix in the following form:
@@ -34,7 +36,7 @@ for the first parameter, and C<%2$s>, C<%3$s> for the second and third respectiv
 A I<file-chooser.launcher> value of C<app --line '%2$s' --col '%3$s' '%1$s'> would
 therefore expand to C<app --line '5' --col '7' 'file.txt'> if it is used to open
 C<file.txt> in line C<5> and column C<7>.
-It is recommended to use single quotes around the arguments, especially the file
+It is recommended to use single quotes around the launcher arguments, especially the file
 path, since it might contain whitespace or other symbols which could be
 interpreted by the shell.
 See the examples near the end of this document.

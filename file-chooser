@@ -39,6 +39,8 @@ By invoking the I<file-chooser:choose> action, the scrollback buffer is scanned 
 paths to files and a list is presented with the result.
 This list can be navigated and the application specified by the
 I<file-chooser.launcher> resource is used to open the desired file.
+Since scanning for files in the whole scrollback buffer would take a long time, if
+the buffer is big, only the most recent screen is scanned.
 
 The scanner does not only recognize paths to files, but also those, which have a
 line and column as suffix in the following form:
@@ -262,7 +264,7 @@ sub key_pressed {
         $self->tt_write( $self->locale_encode( $launcher . "\n" ) );
       }
       else {
-        $self->exec_async( ( "/bin/sh", "-c", $launcher) );
+        $self->exec_async( ( "/bin/sh", "-c", $launcher ) );
       }
     }
     $self->do_exit;
@@ -342,7 +344,12 @@ sub populate_files {
   my $foreground_process = $self->proc_find_foreground_process("self");
   my $cwd                = $self->proc_cwd( $foreground_process->{pid} );
   my $row                = $self->nrow - 1;
-  while ( $row >= 0 && scalar @{ $self->{files} } < $self->{result_length} ) {
+  my $end                = -1;
+  # to scan the whole scrollback buffer:
+  # $end = $self->nrow - 1 - $self->total_rows;
+  # might take very long, try:
+  # $ ls ; head -c $(xrdb -query |grep -i 'urxvt.*saveLines' |awk '{print $2}' |xargs echo '16 *' |bc) /dev/random |hexdump -C
+  while ( $row > $end && scalar @{ $self->{files} } < $self->{result_length} ) {
     my $line  = $self->line($row);
     my $files = $self->find_files( $line->t, $cwd );
     for my $file ( reverse @$files ) {
