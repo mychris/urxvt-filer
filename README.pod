@@ -1,3 +1,31 @@
 =head1 NAME
 
 file-chooser - Extension for URxvt which helps you open files
+
+=head1 EXAMPLES
+
+The following shows example of launcher resources for different types of editors/IDEs.
+
+    # %1$s = path to the file (might contain whitespaces)
+    # %2$s = line number
+    # %3$s = column
+    ## Terminal
+    # nano
+    URxvt.file-chooser.launcher: @nano '+%2$s,%3$s' '%1$s'
+    # ne
+    URxvt.file-chooser.launcher: @ne '+%2$s,%3$s' '%1$s'
+    # tilde
+    URxvt.file-chooser.launcher: @tilde '%1$s:%2$s:%3$s'
+    # dte
+    URxvt.file-chooser.launcher: @dte '+%2$s' '%1$s'
+    # vim
+    URxvt.file-chooser.launcher: @vim '+normal %2$sG%3$s|' '%1$s'
+    ## GUI
+    # Kate
+    URxvt.file-chooser.launcher: kate '%1$s:%2$s:%3$s'
+    # gvim
+    URxvt.file-chooser.launcher: gvim '+normal %2$sG%3$s|' '%1$s'
+    # emacs
+    URxvt.file-chooser.launcher: emacs '+%2$s:%3$s' '%1$s'
+    # Code
+    URxvt.file-chooser.launcher: code --goto '%1$s:%2$s:%3$s'

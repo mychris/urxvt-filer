@@ -26,6 +26,34 @@
 
 file-chooser - Extension for URxvt which helps you open files
 
+=head1 EXAMPLES
+
+The following shows example of launcher resources for different types of editors/IDEs.
+
+    # %1$s = path to the file (might contain whitespaces)
+    # %2$s = line number
+    # %3$s = column
+    ## Terminal
+    # nano
+    URxvt.file-chooser.launcher: @nano '+%2$s,%3$s' '%1$s'
+    # ne
+    URxvt.file-chooser.launcher: @ne '+%2$s,%3$s' '%1$s'
+    # tilde
+    URxvt.file-chooser.launcher: @tilde '%1$s:%2$s:%3$s'
+    # dte
+    URxvt.file-chooser.launcher: @dte '+%2$s' '%1$s'
+    # vim
+    URxvt.file-chooser.launcher: @vim '+normal %2$sG%3$s|' '%1$s'
+    ## GUI
+    # Kate
+    URxvt.file-chooser.launcher: kate '%1$s:%2$s:%3$s'
+    # gvim
+    URxvt.file-chooser.launcher: gvim '+normal %2$sG%3$s|' '%1$s'
+    # emacs
+    URxvt.file-chooser.launcher: emacs '+%2$s:%3$s' '%1$s'
+    # Code
+    URxvt.file-chooser.launcher: code --goto '%1$s:%2$s:%3$s'
+
 =cut
 
 use warnings;
@@ -39,7 +67,7 @@ use Data::Dumper;
 use Env qw(HOME);
 use File::Basename qw(basename);
 use File::Spec;
-use List::Util qw(min max);
+use Text::ParseWords qw(parse_line);
 
 sub config_resource {
   my ( $self, $key, $default ) = @_;
@@ -80,21 +108,13 @@ sub on_resize_all_windows {
 sub key_pressed {
   my ( $self, $event, $keysym, $string ) = @_;
   if ( $keysym == $self->{keysym_up} ) {
-    if ( $self->{selected} == scalar @{ $self->{files} } - 1 ) {
-      $self->{selected} = 0;
-    }
-    else {
-      $self->{selected} = $self->{selected} + 1;
-    }
+    $self->{selected} =
+      ( $self->{selected} == scalar @{ $self->{files} } - 1 ) ? 0 : $self->{selected} + 1;
     $self->do_render;
   }
   if ( $keysym == $self->{keysym_down} ) {
-    if ( $self->{selected} == 0 ) {
-      $self->{selected} = scalar @{ $self->{files} } - 1;
-    }
-    else {
-      $self->{selected} = $self->{selected} - 1;
-    }
+    $self->{selected} =
+      ( $self->{selected} == 0 ) ? scalar @{ $self->{files} } - 1 : $self->{selected} - 1;
     $self->do_render;
   }
   if ( $keysym == $self->{keysym_pgup} ) {
@@ -106,7 +126,24 @@ sub key_pressed {
     $self->do_render;
   }
   if ( $keysym == $self->{keysym_return} ) {
-    $self->exec_async( ( $self->{launcher}, $self->{files}[ $self->{selected} ]->{path} ) );
+    my $file = $self->{files}[ $self->{selected} ];
+    my ( $full_path, $line, $column ) = $self->split_path( $file->{base}, $file->{path} );
+    my $launcher = $self->{launcher};
+    if ( $self->{launcher} =~ /%[1-3]\$s/x ) {
+      # expect the launcher to be a sprintf format
+      $launcher = sprintf( $launcher, $full_path, $line, $column );
+    }
+    else {
+      $launcher .= " '${full_path}'";
+    }
+    if ( rindex( $launcher, '@', 0 ) == 0 ) {
+      $launcher = substr( $launcher, 1 );
+      $self->tt_write( $self->locale_encode( $launcher . "\n" ) );
+    }
+    else {
+      my @args = parse_line( '\s+', 0, $launcher );
+      $self->exec_async(@args);
+    }
     $self->do_exit;
   }
   if ( $keysym == $self->{keysym_esc} ) {
@@ -189,11 +226,13 @@ sub populate_files {
     my $text  = $line->t;
     my $files = $self->find_files( $text, $cwd );
     for my $file ( reverse @$files ) {
-      my $path = File::Spec->catfile( @{$file}[0], @{$file}[1] );
-      unless ( grep { $path eq $_->{path} } @{ $self->{files} } ) {
+      my $base = @{$file}[0];
+      my $path = @{$file}[1];
+      unless ( grep { $base eq $_->{base} && $path eq $_->{path} } @{ $self->{files} } ) {
         push @{ $self->{files} },
           {
-          path    => @{$file}[1],
+          base    => $base,
+          path    => $path,
           overlay => undef,
           };
       }
@@ -217,47 +256,31 @@ sub find_files {
   # The inner loop moves to the left, removing things from the right.
   # This is a greedy search, always returning the longest files, if found.
   while ( $head ne "" ) {
-    my $path = $fgp_cwd;
-
-    # see if this is an absolute path, or a path inside $HOME and adjust
-    if ( rindex( $head, "/", 0 ) == 0 ) {
-      $path = "/";
-      $head = substr( $head, 1 );
-    }
-    elsif ( rindex( $head, "~/", 0 ) == 0 ) {
-      $path = $HOME;
-      $head = substr( $head, 2 );
-    }
-    if ( $self->check_path( $path, $head ) ) {
-
+    my $base = $fgp_cwd;
+    $base = "" if ( rindex( $head, "/", 0 ) == 0 || rindex( $head, "~/", 0 ) == 0 );
+    if ( $self->check_path( $base, $head ) ) {
       # the whole path exists (to the end of line)
-      push @result, [ $path, $head ];
+      push @result, [ $base, $head ];
       last;
     }
     $tail = $head;
     while ( $tail =~ /.*\W+/x ) {
       my $idx = $+[0];
       if ( $tail !~ /\W$/x ) {
-
-        # test removing everything from the right, but not the word boundary
+        # remove everything from the right, but not the matched word boundary
         $tail = substr( $tail, 0, $idx );
-        if ( $self->check_path( $path, $tail ) ) {
+        if ( $self->check_path( $base, $tail ) ) {
           $head = substr( $head, $idx );
-          push @result, [ $path, $tail ];
+          push @result, [ $base, $tail ];
           last;
         }
       }
 
       # remove the word boundary found before
       $tail = substr( $tail, 0, $idx - 1 );
-      if ( $tail ne "" && $self->check_path( $path, $tail ) ) {
-        if ( length($head) > $idx - 1 ) {
-          $head = substr( $head, $idx - 1 );
-        }
-        else {
-          $head = "";
-        }
-        push @result, [ $path, $tail ];
+      if ( $tail ne "" && $self->check_path( $base, $tail ) ) {
+        $head = ( length($head) > $idx - 1 ) ? substr( $head, $idx - 1 ) : "";
+        push @result, [ $base, $tail ];
         last;
       }
     }
@@ -272,22 +295,42 @@ sub find_files {
 }
 
 sub check_path {
-  my ( $this, $base, $path ) = @_;
-
+  my ( $self, $base, $path ) = @_;
   # check if the whole thing exists
-  $path = File::Spec->catfile( $base, $path );
+  if ( $base ne "" ) {
+    $path = File::Spec->catfile( $base, $path );
+  }
+  $path =~ s/^~/${HOME}/x;
   return 1 if ( -f $path );
-
   # remove possible :line suffix
   if ( $path =~ /^(.*):[1-9][0-9]*$/x ) {
     return 1 if ( -f $1 );
   }
-
   # remove possible :line:column suffix
   if ( $path =~ /^(.*):[1-9][0-9]*:[1-9][0-9]*$/x ) {
     return 1 if ( -f $1 );
   }
   return 0;
+}
+
+sub split_path {
+  my ( $self, $base, $path ) = @_;
+  if ( $base ne "" ) {
+    $path = File::Spec->catfile( $base, $path );
+  }
+  $path =~ s/^~/${HOME}/x;
+  return ( $path, 0, 0 ) if ( -f $path );
+  # remove possible :line suffix
+  if ( $path =~ /^(.*):([1-9][0-9]*)$/x ) {
+    return ( $1, $2, 0 ) if ( -f $1 );
+  }
+  # remove possible :line:column suffix
+  if ( $path =~ /^(.*):([1-9][0-9]*):([1-9][0-9]*)$/x ) {
+    return ( $1, $2, $3 ) if ( -f $1 );
+  }
+  # this can happen, if there was a change on the file system between the time
+  # of parsing for the paths and choosing one. Return the path.
+  return ( $path, 0, 0 );
 }
 
 sub proc_stat {
