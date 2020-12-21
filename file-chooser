@@ -68,8 +68,6 @@ sub on_start {
 
   $self->{selected} = 0;
 
-  $self->do_enter;
-
   return 1;
 }
 
