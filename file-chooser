@@ -271,9 +271,9 @@ sub find_files {
       push @result, [ $base, $head ];
       last;
     }
-    while ( $tail =~ /.*\W+/x ) {
+    while ( $tail =~ /.*[^-~\w]+/x ) {
       my $idx = $+[0];
-      if ( $tail !~ /\W$/x ) {
+      if ( $tail !~ /[^-~\w]$/x ) {
         # remove everything from the right, but not the matched word boundary
         $tail = substr( $tail, 0, $idx );
         if ( $self->check_path( $base, $tail ) ) {
@@ -291,7 +291,7 @@ sub find_files {
         last;
       }
     }
-    if ( $head =~ /\W(.*)/x ) {
+    if ( $head =~ /[^-~\w](.*)/x ) {
       $head = $1;
     }
     else {
