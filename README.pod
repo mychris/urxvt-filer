@@ -1,0 +1,3 @@
+=head1 NAME
+
+file-chooser - Extension for URxvt which helps you open files

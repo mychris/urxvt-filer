@@ -1,0 +1,410 @@
+#!/usr/bin/env perl
+# SPDX-License-Identifier: MIT
+# MIT License
+#
+# Copyright (c) 2020 Christoph Göttschkes
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+=head1 NAME
+
+file-chooser - Extension for URxvt which helps you open files
+
+=cut
+
+use warnings;
+use strict;
+
+use urxvt;
+
+use Carp qw(croak);
+use Cwd qw(realpath);
+use Data::Dumper;
+use Env qw(HOME);
+use File::Basename qw(basename);
+use File::Spec;
+use List::Util qw(min max);
+
+sub config_resource {
+  my ( $self, $key, $default ) = @_;
+  if ( defined( my $value = $self->x_resource("%.$key") ) ) {
+    return $self->locale_decode($value);
+  }
+  return $default;
+}
+
+sub on_start {
+  my ($self) = @_;
+
+  $self->{launcher}  = $self->config_resource( "launcher", "kate" );
+  $self->{indicator} = $self->config_resource( "cursor",   "►" );
+  $self->{indicator_enc}     = $self->special_encode( $self->{indicator} );
+  $self->{indicator_enc_len} = $self->strwidth( $self->{indicator} );
+  $self->{result_length}     = int( $self->config_resource( "result-length", "20" ) );
+
+  $self->{keysym_up}     = $self->XStringToKeysym("Up");
+  $self->{keysym_down}   = $self->XStringToKeysym("Down");
+  $self->{keysym_esc}    = $self->XStringToKeysym("Escape");
+  $self->{keysym_return} = $self->XStringToKeysym("Return");
+  $self->{keysym_pgup}   = $self->XStringToKeysym("Prior");
+  $self->{keysym_pgdown} = $self->XStringToKeysym("Next");
+  @{ $self->{files} } = ();
+
+  $self->{selected} = 0;
+
+  $self->do_enter;
+
+  return 1;
+}
+
+sub on_resize_all_windows {
+  my ( $self, $new_width, $new_height ) = @_;
+  $self->do_render(1);
+  return 0;
+}
+
+sub key_pressed {
+  my ( $self, $event, $keysym, $string ) = @_;
+  if ( $keysym == $self->{keysym_up} ) {
+    if ( $self->{selected} == scalar @{ $self->{files} } - 1 ) {
+      $self->{selected} = 0;
+    }
+    else {
+      $self->{selected} = $self->{selected} + 1;
+    }
+    $self->do_render;
+  }
+  if ( $keysym == $self->{keysym_down} ) {
+    if ( $self->{selected} == 0 ) {
+      $self->{selected} = scalar @{ $self->{files} } - 1;
+    }
+    else {
+      $self->{selected} = $self->{selected} - 1;
+    }
+    $self->do_render;
+  }
+  if ( $keysym == $self->{keysym_pgup} ) {
+    $self->{selected} = scalar @{ $self->{files} } - 1;
+    $self->do_render;
+  }
+  if ( $keysym == $self->{keysym_pgdown} ) {
+    $self->{selected} = 0;
+    $self->do_render;
+  }
+  if ( $keysym == $self->{keysym_return} ) {
+    $self->exec_async( ( $self->{launcher}, $self->{files}[ $self->{selected} ]->{path} ) );
+    $self->do_exit;
+  }
+  if ( $keysym == $self->{keysym_esc} ) {
+    $self->do_exit;
+  }
+  return 1;
+}
+
+sub do_render {
+  my ( $self, $force ) = @_;
+  $force ||= 0;
+  my $len = scalar @{ $self->{files} };
+  my $idx = 0;
+  for my $file ( @{ $self->{files} } ) {
+    if ( $force || !defined( $file->{overlay} ) ) {
+      if ( defined( $file->{overlay} ) ) {
+        $file->{overlay}->hide;
+        delete $file->{overlay};
+      }
+      $file->{overlay} =
+        $self->overlay( 0, -$idx - 1, $self->ncol, 1, urxvt::OVERLAY_RSTYLE, 0 );
+      $file->{overlay}
+        ->set( $self->{indicator_enc_len} + 2, 0, $self->special_encode( $file->{path} ) );
+    }
+    if ( $self->{selected} == $idx ) {
+      $file->{overlay}->set( 1, 0, $self->{indicator_enc} );
+    }
+    else {
+      $file->{overlay}->set( 1, 0, $self->special_encode( " " x $self->{indicator_enc_len} ) );
+    }
+    $idx += 1;
+  }
+  return 1;
+}
+
+sub on_action {
+  my ( $self, $action ) = @_;
+  if ( $action eq "choose" ) {
+    if ( scalar @{ $self->{files} } == 0 ) {
+      $self->do_enter;
+    }
+    else {
+      $self->do_exit;
+    }
+  }
+  return 1;
+}
+
+sub do_enter {
+  my ($self) = @_;
+  $self->populate_files;
+  return if ( scalar @{ $self->{files} } == 0 );
+  $self->{selected} = 0;
+  $self->enable( key_press => \&key_pressed );
+  $self->do_render;
+  return;
+}
+
+sub do_exit {
+  my ($self) = @_;
+  $self->disable("key_press");
+  for my $file ( @{ $self->{files} } ) {
+    if ( defined( $file->{overlay} ) ) {
+      $file->{overlay}->hide;
+      delete $file->{overlay};
+    }
+  }
+  @{ $self->{files} } = ();
+  $self->{selected} = 0;
+  return;
+}
+
+sub populate_files {
+  my ($self)             = @_;
+  my $foreground_process = $self->proc_find_foreground_process("self");
+  my $cwd                = $self->proc_cwd( $foreground_process->{pid} );
+  my $row                = $self->nrow - 1;
+  while ( $row >= 0 && scalar @{ $self->{files} } < $self->{result_length} ) {
+    my $line  = $self->line($row);
+    my $text  = $line->t;
+    my $files = $self->find_files( $text, $cwd );
+    for my $file ( reverse @$files ) {
+      my $path = File::Spec->catfile( @{$file}[0], @{$file}[1] );
+      unless ( grep { $path eq $_->{path} } @{ $self->{files} } ) {
+        push @{ $self->{files} },
+          {
+          path    => @{$file}[1],
+          overlay => undef,
+          };
+      }
+      if ( scalar @{ $self->{files} } >= $self->{result_length} ) {
+      }
+    }
+    $row = $line->beg - 1;
+  }
+  return;
+}
+
+sub find_files {
+  my ( $self, $text, $fgp_cwd ) = @_;
+  my @result = ();
+  return \@result if ( $text eq "" );
+  my $tail = $text;
+  my $head = $text;
+
+  # split on word boundaries.
+  # The outer loop moves to the right, removing things from the left.
+  # The inner loop moves to the left, removing things from the right.
+  # This is a greedy search, always returning the longest files, if found.
+  while ( $head ne "" ) {
+    my $path = $fgp_cwd;
+
+    # see if this is an absolute path, or a path inside $HOME and adjust
+    if ( rindex( $head, "/", 0 ) == 0 ) {
+      $path = "/";
+      $head = substr( $head, 1 );
+    }
+    elsif ( rindex( $head, "~/", 0 ) == 0 ) {
+      $path = $HOME;
+      $head = substr( $head, 2 );
+    }
+    if ( $self->check_path( $path, $head ) ) {
+
+      # the whole path exists (to the end of line)
+      push @result, [ $path, $head ];
+      last;
+    }
+    $tail = $head;
+    while ( $tail =~ /.*\W+/x ) {
+      my $idx = $+[0];
+      if ( $tail !~ /\W$/x ) {
+
+        # test removing everything from the right, but not the word boundary
+        $tail = substr( $tail, 0, $idx );
+        if ( $self->check_path( $path, $tail ) ) {
+          $head = substr( $head, $idx );
+          push @result, [ $path, $tail ];
+          last;
+        }
+      }
+
+      # remove the word boundary found before
+      $tail = substr( $tail, 0, $idx - 1 );
+      if ( $tail ne "" && $self->check_path( $path, $tail ) ) {
+        if ( length($head) > $idx - 1 ) {
+          $head = substr( $head, $idx - 1 );
+        }
+        else {
+          $head = "";
+        }
+        push @result, [ $path, $tail ];
+        last;
+      }
+    }
+    if ( $head =~ /\W(.*)/x ) {
+      $head = $1;
+    }
+    else {
+      $head = "";
+    }
+  }
+  return \@result;
+}
+
+sub check_path {
+  my ( $this, $base, $path ) = @_;
+
+  # check if the whole thing exists
+  $path = File::Spec->catfile( $base, $path );
+  return 1 if ( -f $path );
+
+  # remove possible :line suffix
+  if ( $path =~ /^(.*):[1-9][0-9]*$/x ) {
+    return 1 if ( -f $1 );
+  }
+
+  # remove possible :line:column suffix
+  if ( $path =~ /^(.*):[1-9][0-9]*:[1-9][0-9]*$/x ) {
+    return 1 if ( -f $1 );
+  }
+  return 0;
+}
+
+sub proc_stat {
+  my ( $self, $pid ) = @_;
+  my $file = File::Spec->catfile( File::Spec->rootdir(), 'proc', $pid, 'stat' );
+  my $stat_content;
+  {
+    local $/ = undef;
+    open my $fh, '<', $file or croak("can't open $file: $!");
+    $stat_content = <$fh>;
+    close $fh;
+  }
+
+  # see man 5 proc
+  my @stat_arr = $stat_content =~ /(?<=\().*(?=\))|[^\s()]+/xgs;
+  return {
+    pid                   => int( $stat_arr[0] ),
+    comm                  => $stat_arr[1],
+    state                 => $stat_arr[2],
+    ppid                  => int( $stat_arr[3] ),
+    pgrp                  => int( $stat_arr[4] ),
+    session               => int( $stat_arr[5] ),
+    tty_nr                => int( $stat_arr[6] ),
+    tpgid                 => int( $stat_arr[7] ),
+    flags                 => int( $stat_arr[8] ),
+    minflt                => int( $stat_arr[9] ),
+    cminflt               => int( $stat_arr[10] ),
+    majflt                => int( $stat_arr[11] ),
+    cmajflt               => int( $stat_arr[12] ),
+    utime                 => int( $stat_arr[13] ),
+    stime                 => int( $stat_arr[14] ),
+    cutime                => int( $stat_arr[15] ),
+    cstime                => int( $stat_arr[16] ),
+    priority              => int( $stat_arr[17] ),
+    nice                  => int( $stat_arr[18] ),
+    num_threads           => int( $stat_arr[19] ),
+    itrealvalue           => int( $stat_arr[20] ),
+    starttime             => int( $stat_arr[21] ),
+    vsize                 => int( $stat_arr[22] ),
+    rss                   => int( $stat_arr[23] ),
+    rsslim                => int( $stat_arr[24] ),
+    startcode             => int( $stat_arr[25] ),
+    endcode               => int( $stat_arr[26] ),
+    startstack            => int( $stat_arr[27] ),
+    kstkesp               => int( $stat_arr[28] ),
+    kstkeip               => int( $stat_arr[29] ),
+    signal                => int( $stat_arr[30] ),
+    blocked               => int( $stat_arr[31] ),
+    sigignore             => int( $stat_arr[32] ),
+    sigcatch              => int( $stat_arr[33] ),
+    wchan                 => int( $stat_arr[34] ),
+    nswap                 => int( $stat_arr[35] ),
+    cnswap                => int( $stat_arr[36] ),
+    exit_signal           => int( $stat_arr[37] ),
+    processor             => int( $stat_arr[38] ),
+    rt_priority           => int( $stat_arr[39] ),
+    policy                => int( $stat_arr[40] ),
+    delayacct_blkio_ticks => int( $stat_arr[41] ),
+    guest_time            => int( $stat_arr[42] ),
+    cguest_time           => int( $stat_arr[43] ),
+    start_data            => int( $stat_arr[44] ),
+    end_data              => int( $stat_arr[45] ),
+    start_brk             => int( $stat_arr[46] ),
+    arg_start             => int( $stat_arr[47] ),
+    arg_end               => int( $stat_arr[48] ),
+    env_start             => int( $stat_arr[49] ),
+    env_end               => int( $stat_arr[50] ),
+    exit_code             => int( $stat_arr[51] ),
+  };
+}
+
+sub proc_self_pid {
+  my ($self) = @_;
+  my $f = File::Spec->catdir( File::Spec->rootdir(), 'proc', 'self' );
+  return int( basename( realpath($f) ) );
+}
+
+sub proc_cwd {
+  my ( $self, $pid ) = @_;
+  my $f = File::Spec->catdir( File::Spec->rootdir(), 'proc', $pid, 'cwd' );
+  return realpath($f);
+}
+
+sub proc_children_deep {
+  my ( $self, $pid, $result ) = @_;
+  $result ||= [];
+  my $root = File::Spec->rootdir();
+  $pid = $self->proc_self_pid() if ( $pid eq "self" );
+  my @childs = ();
+  {
+    my $childs_file = File::Spec->catfile( $root, 'proc', $pid, 'task', $pid, 'children' );
+    local $/ = undef;
+    open my $fh, '<', $childs_file or croak("can't open $childs_file: $!");
+    my $childs_content = <$fh>;
+    while ( $childs_content =~ /([0-9]+)/gx ) {
+      push @childs,  int($1);
+      push @$result, int($1);
+    }
+    close $fh;
+  }
+  for my $child (@childs) {
+    my $grand = $self->proc_children_deep( $child, $result );
+  }
+  return $result;
+}
+
+sub proc_find_foreground_process {
+  my ( $self, $parent ) = @_;
+  my $childs = $self->proc_children_deep($parent);
+  my $result = 0;
+  for my $child (@$childs) {
+    my $stat = $self->proc_stat($child);
+    return $stat if ( $stat->{tpgid} == $stat->{pid} );
+  }
+  return;
+}
+
+1;
