@@ -138,13 +138,13 @@ sub key_pressed {
     my $launcher = $self->{launcher};
     if ( $launcher ne "" ) {
       my $file = $self->{files}[ $self->{selected} ];
-      my ( $full_path, $line, $column ) = $self->split_path( $file->{base}, $file->{path} );
+      my ( $path, $line, $column, undef ) = $self->split_path( $file->{base}, $file->{path} );
       if ( $self->{launcher} =~ /%[1-3]\$s/x ) {
         # expect the launcher to be a sprintf format
-        $launcher = sprintf( $launcher, $full_path, $line, $column );
+        $launcher = sprintf( $launcher, $path, $line, $column );
       }
       else {
-        $launcher .= " '${full_path}'";
+        $launcher .= " '${path}'";
       }
       if ( rindex( $launcher, '@', 0 ) == 0 ) {
         $launcher = substr( $launcher, 1 );
@@ -234,8 +234,7 @@ sub populate_files {
   my $row                = $self->nrow - 1;
   while ( $row >= 0 && scalar @{ $self->{files} } < $self->{result_length} ) {
     my $line  = $self->line($row);
-    my $text  = $line->t;
-    my $files = $self->find_files( $text, $cwd );
+    my $files = $self->find_files( $line->t, $cwd );
     for my $file ( reverse @$files ) {
       my $base = @{$file}[0];
       my $path = @{$file}[1];
@@ -247,8 +246,7 @@ sub populate_files {
           overlay => undef,
           };
       }
-      if ( scalar @{ $self->{files} } >= $self->{result_length} ) {
-      }
+      last if ( scalar @{ $self->{files} } >= $self->{result_length} );
     }
     $row = $line->beg - 1;
   }
@@ -258,9 +256,7 @@ sub populate_files {
 sub find_files {
   my ( $self, $text, $fgp_cwd ) = @_;
   my @result = ();
-  return \@result if ( $text eq "" );
-  my $tail = $text;
-  my $head = $text;
+  my $head   = $text;
 
   # split on word boundaries.
   # The outer loop moves to the right, removing things from the left.
@@ -268,13 +264,13 @@ sub find_files {
   # This is a greedy search, always returning the longest files, if found.
   while ( $head ne "" ) {
     my $base = $fgp_cwd;
+    my $tail = $head;
     $base = "" if ( rindex( $head, "/", 0 ) == 0 || rindex( $head, "~/", 0 ) == 0 );
     if ( $self->check_path( $base, $head ) ) {
       # the whole path exists (to the end of line)
       push @result, [ $base, $head ];
       last;
     }
-    $tail = $head;
     while ( $tail =~ /.*\W+/x ) {
       my $idx = $+[0];
       if ( $tail !~ /\W$/x ) {
@@ -307,21 +303,8 @@ sub find_files {
 
 sub check_path {
   my ( $self, $base, $path ) = @_;
-  # check if the whole thing exists
-  if ( $base ne "" ) {
-    $path = File::Spec->catfile( $base, $path );
-  }
-  $path =~ s/^~/${HOME}/x;
-  return 1 if ( -f $path );
-  # remove possible :line suffix
-  if ( $path =~ /^(.*):[1-9][0-9]*$/x ) {
-    return 1 if ( -f $1 );
-  }
-  # remove possible :line:column suffix
-  if ( $path =~ /^(.*):[1-9][0-9]*:[1-9][0-9]*$/x ) {
-    return 1 if ( -f $1 );
-  }
-  return 0;
+  my ( undef, undef, undef, $ok ) = $self->split_path( $base, $path );
+  return $ok;
 }
 
 sub split_path {
@@ -330,18 +313,16 @@ sub split_path {
     $path = File::Spec->catfile( $base, $path );
   }
   $path =~ s/^~/${HOME}/x;
-  return ( $path, 0, 0 ) if ( -f $path );
+  return ( $path, 0, 0, 1 ) if ( -f $path );
   # remove possible :line suffix
   if ( $path =~ /^(.*):([1-9][0-9]*)$/x ) {
-    return ( $1, $2, 0 ) if ( -f $1 );
+    return ( $1, $2, 0, 1 ) if ( -f $1 );
   }
   # remove possible :line:column suffix
   if ( $path =~ /^(.*):([1-9][0-9]*):([1-9][0-9]*)$/x ) {
-    return ( $1, $2, $3 ) if ( -f $1 );
+    return ( $1, $2, $3, 1 ) if ( -f $1 );
   }
-  # this can happen, if there was a change on the file system between the time
-  # of parsing for the paths and choosing one. Return the path.
-  return ( $path, 0, 0 );
+  return ( $path, 0, 0, 0 );
 }
 
 sub proc_stat {
