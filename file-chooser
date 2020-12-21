@@ -56,7 +56,7 @@ sub on_start {
   $self->{indicator} = $self->config_resource( "cursor",   "►" );
   $self->{indicator_enc}     = $self->special_encode( $self->{indicator} );
   $self->{indicator_enc_len} = $self->strwidth( $self->{indicator} );
-  $self->{result_length}     = int( $self->config_resource( "result-length", "20" ) );
+  $self->{result_length}     = int( $self->config_resource( "result-length", "5" ) );
 
   $self->{keysym_up}     = $self->XStringToKeysym("Up");
   $self->{keysym_down}   = $self->XStringToKeysym("Down");
