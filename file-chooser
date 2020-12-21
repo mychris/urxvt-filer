@@ -262,8 +262,7 @@ sub key_pressed {
         $self->tt_write( $self->locale_encode( $launcher . "\n" ) );
       }
       else {
-        my @args = parse_line( '\s+', 0, $launcher );
-        $self->exec_async(@args);
+        $self->exec_async( ( "/bin/sh", "-c", $launcher) );
       }
     }
     $self->do_exit;
