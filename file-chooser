@@ -64,7 +64,7 @@ use urxvt;
 use Carp qw(croak);
 use Cwd qw(realpath);
 use Data::Dumper;
-use Env qw(HOME);
+use Env qw(HOME EDITOR VISUAL);
 use File::Basename qw(basename);
 use File::Spec;
 use Text::ParseWords qw(parse_line);
@@ -80,7 +80,7 @@ sub config_resource {
 sub on_start {
   my ($self) = @_;
 
-  $self->{launcher}  = $self->config_resource( "launcher", "kate" );
+  $self->{launcher}  = $self->config_resource( "launcher", "" );
   $self->{indicator} = $self->config_resource( "cursor",   "►" );
   $self->{indicator_enc}     = $self->special_encode( $self->{indicator} );
   $self->{indicator_enc_len} = $self->strwidth( $self->{indicator} );
@@ -95,6 +95,15 @@ sub on_start {
   @{ $self->{files} } = ();
 
   $self->{selected} = 0;
+
+  if ( $self->{launcher} eq "" ) {
+    if ( defined($VISUAL) && $VISUAL ne "" ) {
+      $self->{launcher} = $VISUAL;
+    }
+    elsif ( defined($EDITOR) && $EDITOR ne "" ) {
+      $self->{launcher} = "@" . $EDITOR;
+    }
+  }
 
   return 1;
 }
@@ -126,23 +135,25 @@ sub key_pressed {
     $self->do_render;
   }
   if ( $keysym == $self->{keysym_return} ) {
-    my $file = $self->{files}[ $self->{selected} ];
-    my ( $full_path, $line, $column ) = $self->split_path( $file->{base}, $file->{path} );
     my $launcher = $self->{launcher};
-    if ( $self->{launcher} =~ /%[1-3]\$s/x ) {
-      # expect the launcher to be a sprintf format
-      $launcher = sprintf( $launcher, $full_path, $line, $column );
-    }
-    else {
-      $launcher .= " '${full_path}'";
-    }
-    if ( rindex( $launcher, '@', 0 ) == 0 ) {
-      $launcher = substr( $launcher, 1 );
-      $self->tt_write( $self->locale_encode( $launcher . "\n" ) );
-    }
-    else {
-      my @args = parse_line( '\s+', 0, $launcher );
-      $self->exec_async(@args);
+    if ( $launcher ne "" ) {
+      my $file = $self->{files}[ $self->{selected} ];
+      my ( $full_path, $line, $column ) = $self->split_path( $file->{base}, $file->{path} );
+      if ( $self->{launcher} =~ /%[1-3]\$s/x ) {
+        # expect the launcher to be a sprintf format
+        $launcher = sprintf( $launcher, $full_path, $line, $column );
+      }
+      else {
+        $launcher .= " '${full_path}'";
+      }
+      if ( rindex( $launcher, '@', 0 ) == 0 ) {
+        $launcher = substr( $launcher, 1 );
+        $self->tt_write( $self->locale_encode( $launcher . "\n" ) );
+      }
+      else {
+        my @args = parse_line( '\s+', 0, $launcher );
+        $self->exec_async(@args);
+      }
     }
     $self->do_exit;
   }
