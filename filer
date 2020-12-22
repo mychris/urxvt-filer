@@ -25,7 +25,7 @@
 =encoding UTF-8
 =head1 NAME
 
-file-chooser - Extension for URxvt which helps you open files
+filer - Extension for URxvt which helps you open files
 
 =head1 DESCRIPTION
 
@@ -35,10 +35,10 @@ It scans through the scrollback buffer and tries to find paths to files.
 It can find files referenced by absolute path, or by relative path.
 To do so, it uses the current directory of the foreground process of the terminal.
 
-By invoking the I<file-chooser:choose> action, the scrollback buffer is scanned for
+By invoking the I<filer:scan> action, the scrollback buffer is scanned for
 paths to files and a list is presented with the result.
 This list can be navigated and the application specified by the
-I<file-chooser.launcher> resource is used to open the desired file.
+I<filer.launcher> resource is used to open the desired file.
 Since scanning for files in the whole scrollback buffer would take a long time, if
 the buffer is big, only the most recent screen is scanned.
 
@@ -49,7 +49,7 @@ This syntax is commonly used by compilers to specify the file and the location
 at which a compilation error occurred.
 
 Since the C<E<lt>pathE<gt>:E<lt>lineE<gt>:E<lt>columnE<gt>>
-syntax is not understood by every editor, the I<file-chooser.launcher> resource
+syntax is not understood by every editor, the I<filer.launcher> resource
 can specify the arguments to the application.
 The B<perl> B<sprintf> syntax is used to do so.
 The I<first> parameter is the path to the file.
@@ -57,7 +57,7 @@ The I<second> parameter is the line number.
 The I<third> parameter is the column.
 The parameters can be referenced using the format parameter index syntax, like C<%1$s>
 for the first parameter, and C<%2$s>, C<%3$s> for the second and third respectively.
-A I<file-chooser.launcher> value of C<app --line '%2$s' --col '%3$s' '%1$s'> would
+A I<filer.launcher> value of C<app --line '%2$s' --col '%3$s' '%1$s'> would
 therefore expand to C<app --line '5' --col '7' 'file.txt'> if it is used to open
 C<file.txt> in line C<5> and column C<7>.
 It is recommended to use single quotes around the launcher arguments, especially the file
@@ -65,20 +65,20 @@ path, since it might contain whitespace or other symbols which could be
 interpreted by the shell.
 See the examples near the end of this document.
 
-If the I<file-chooser.launcher> application is a command line editor,
+If the I<filer.launcher> application is a command line editor,
 the program name must be prepended with a C<@> symbol to indicate this.
 If this is done, the application is not executed by using B<fork> and B<exec>, but the
 resulting command is printed to the tty, which makes the shell execute the
 application.
 This only works if the foreground process is a shell.
-Because of this, the B<file-chooser> does not work while programs like B<less>
+Because of this, the B<filer> does not work while programs like B<less>
 are in the foreground, if the launcher is a command line editor.
 
 The length of the result list is limited by the resource
-I<file-chooser.result-length>, which specifies its maximum length.
+I<filer.result-length>, which specifies its maximum length.
 
 In the result list, a cursor symbol is used to indicate the currently selected
-path. This symbol can be changed by using the I<file-chooser.indicator> resource.
+path. This symbol can be changed by using the I<filer.indicator> resource.
 
 After scanning is completed the result list can be navigated using the B<up key>,
 B<down key>, B<page-up key>, and B<page-down key>.
@@ -120,13 +120,13 @@ Changes the cursor icon in the result list.
 The following shows an example resource configuration with the default values
 for each resource entry:
 
-    URxvt.file-chooser.result-length: 5
-    URxvt.file-chooser.cursor: ►
+    URxvt.filer.result-length: 5
+    URxvt.filer.cursor: ►
 
-Enable the extension and configure a keysym for the I<file-chooser:choose> action:
+Enable the extension and configure a keysym for the I<filer:scan> action:
 
-    URxvt.perl-ext-common: default,file-chooser,...
-    URxvt.keysym.M-c: file-chooser:choose
+    URxvt.perl-ext-common: default,filer,...
+    URxvt.keysym.M-c: filer:scan
 
 The following shows examples of launcher resources for different types of editors/IDEs.
 
@@ -134,20 +134,20 @@ The following shows examples of launcher resources for different types of editor
     # %2$s = line number
     # %3$s = column
     ## command line editors
-    URxvt.file-chooser.launcher: @nano '+%2$s,%3$s' '%1$s'
-    URxvt.file-chooser.launcher: @ne '+%2$s,%3$s' '%1$s'
-    URxvt.file-chooser.launcher: @tilde '%1$s:%2$s:%3$s'
-    URxvt.file-chooser.launcher: @dte '+%2$s' '%1$s'
-    URxvt.file-chooser.launcher: @jed '%1$s' -g '%2$s'
-    URxvt.file-chooser.launcher: @vim '+normal %2$sG%3$s|' '%1$s'
+    URxvt.filer.launcher: @nano '+%2$s,%3$s' '%1$s'
+    URxvt.filer.launcher: @ne '+%2$s,%3$s' '%1$s'
+    URxvt.filer.launcher: @tilde '%1$s:%2$s:%3$s'
+    URxvt.filer.launcher: @dte '+%2$s' '%1$s'
+    URxvt.filer.launcher: @jed '%1$s' -g '%2$s'
+    URxvt.filer.launcher: @vim '+normal %2$sG%3$s|' '%1$s'
     ## GUI editors / IDEs
-    URxvt.file-chooser.launcher: kate '%1$s:%2$s:%3$s'
-    URxvt.file-chooser.launcher: gedit '%1$s' '+%2$s:%3$s'
-    URxvt.file-chooser.launcher: atom '%1$s:%2$s:%3$s'
-    URxvt.file-chooser.launcher: gvim '+normal %2$sG%3$s|' '%1$s'
-    URxvt.file-chooser.launcher: emacsclient -n '+%2$s:%3$s' '%1$s'
-    URxvt.file-chooser.launcher: geany '--line=%2$s' '--column=%3$s' '%1$s'
-    URxvt.file-chooser.launcher: code --goto '%1$s:%2$s:%3$s'
+    URxvt.filer.launcher: kate '%1$s:%2$s:%3$s'
+    URxvt.filer.launcher: gedit '%1$s' '+%2$s:%3$s'
+    URxvt.filer.launcher: atom '%1$s:%2$s:%3$s'
+    URxvt.filer.launcher: gvim '+normal %2$sG%3$s|' '%1$s'
+    URxvt.filer.launcher: emacsclient -n '+%2$s:%3$s' '%1$s'
+    URxvt.filer.launcher: geany '--line=%2$s' '--column=%3$s' '%1$s'
+    URxvt.filer.launcher: code --goto '%1$s:%2$s:%3$s'
 
 =head1 SEE ALSO
 
@@ -304,7 +304,7 @@ sub do_render {
 
 sub on_action {
   my ( $self, $action ) = @_;
-  if ( $action eq "choose" ) {
+  if ( $action eq "scan" ) {
     if ( scalar @{ $self->{files} } == 0 ) {
       $self->do_enter;
     }
