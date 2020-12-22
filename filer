@@ -260,32 +260,35 @@ sub on_resize_all_windows {
 
 sub key_pressed {
   my ( $self, $event, $keysym, $string ) = @_;
-  if ( $keysym == $self->{keysym_up} ) {
-    $self->{selected} =
-      ( $self->{selected} == scalar @{ $self->{files} } - 1 ) ? 0 : $self->{selected} + 1;
-    $self->do_render;
-  }
-  if ( $keysym == $self->{keysym_down} ) {
-    $self->{selected} =
-      ( $self->{selected} == 0 ) ? scalar @{ $self->{files} } - 1 : $self->{selected} - 1;
-    $self->do_render;
-  }
-  if ( $keysym == $self->{keysym_pgup} ) {
-    $self->{selected} = scalar @{ $self->{files} } - 1;
-    $self->do_render;
-  }
-  if ( $keysym == $self->{keysym_pgdown} ) {
-    $self->{selected} = 0;
-    $self->do_render;
-  }
-  if ( $keysym == $self->{keysym_return} ) {
-    my $file = $self->{files}[ $self->{selected} ];
-    $self->launch($file);
-    $self->do_exit;
-  }
-  if ( $keysym == $self->{keysym_esc} ) {
-    $self->do_exit;
-  }
+  my $switch = {
+    $self->{keysym_up} => sub {
+      my $self = shift;
+      $self->{selected} = ( $self->{selected} + 1 ) % ( scalar @{ $self->{files} } );
+    },
+    $self->{keysym_down} => sub {
+      my $self = shift;
+      $self->{selected} = ( $self->{selected} - 1 ) % ( scalar @{ $self->{files} } );
+    },
+    $self->{keysym_pgup} => sub {
+      my $self = shift;
+      $self->{selected} = scalar @{ $self->{files} } - 1;
+    },
+    $self->{keysym_pgdown} => sub {
+      my $self = shift;
+      $self->{selected} = 0;
+    },
+    $self->{keysym_return} => sub {
+      my $self = shift;
+      my $file = $self->{files}[ $self->{selected} ];
+      $self->do_exit;
+      $self->launch($file);
+    },
+    $self->{keysym_esc} => sub {
+      shift->do_exit;
+    },
+  };
+  ( $switch->{$keysym} || sub { } )->($self);
+  $self->do_render;
   return 1;
 }
 
@@ -365,9 +368,7 @@ sub do_open_first {
   $self->populate_files(1);
   if ( scalar $self->{files} > 0 ) {
     my $file = $self->{files}[0];
-    # remove all files etc.
     $self->do_exit;
-    # then launch
     $self->launch($file);
   }
   return;
