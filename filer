@@ -35,13 +35,13 @@ It scans through the scrollback buffer and tries to find paths to files.
 It can find files referenced by absolute path, or by relative path.
 To do so, it uses the current directory of the foreground process of the terminal.
 
-By invoking the I<filer:scan> action, the scrollback buffer is scanned for
+By invoking the B<filer:scan> action, the scrollback buffer is scanned for
 paths to files and a list is presented with the result.
 This list can be navigated and the application specified by the
-I<filer.launcher> resource is used to open the desired file.
+B<filer.launcher> resource is used to open the desired file.
 Since scanning for files in the whole scrollback buffer would take a long time, if
 the buffer is big, only the most recent screen is scanned.
-In addition to the I<filer:scan> action, the short hand action I<filer:first> can be
+In addition to the B<filer:scan> action, the short hand action B<filer:first> can be
 invoked to scan for files and open the first result.
 
 The scanner does not only recognize paths to files, but also those, which have a
@@ -51,7 +51,7 @@ This syntax is commonly used by compilers to specify the file and the location
 at which a compilation error occurred.
 
 Since the C<E<lt>pathE<gt>:E<lt>lineE<gt>:E<lt>columnE<gt>>
-syntax is not understood by every editor, the I<filer.launcher> resource
+syntax is not understood by every editor, the B<filer.launcher> resource
 can specify the arguments to the application.
 The B<perl> B<sprintf> syntax is used to do so.
 The I<first> parameter is the path to the file.
@@ -59,7 +59,7 @@ The I<second> parameter is the line number.
 The I<third> parameter is the column.
 The parameters can be referenced using the format parameter index syntax, like C<%1$s>
 for the first parameter, and C<%2$s>, C<%3$s> for the second and third respectively.
-A I<filer.launcher> value of C<app --line '%2$s' --col '%3$s' '%1$s'> would
+A B<filer.launcher> value of C<app --line '%2$s' --col '%3$s' '%1$s'> would
 therefore expand to C<app --line '5' --col '7' 'file.txt'> if it is used to open
 C<file.txt> in line C<5> and column C<7>.
 It is recommended to use single quotes around the launcher arguments, especially the file
@@ -67,7 +67,7 @@ path, since it might contain whitespace or other symbols which could be
 interpreted by the shell.
 See the examples near the end of this document.
 
-If the I<filer.launcher> application is a command line editor,
+If the B<filer.launcher> application is a command line editor,
 the program name must be prepended with a C<@> symbol to indicate this.
 If this is done, the application is not executed by using B<fork> and B<exec>, but the
 resulting command is printed to the tty, which makes the shell execute the
@@ -77,10 +77,10 @@ Because of this, the B<filer> does not work while programs like B<less>
 are in the foreground, if the launcher is a command line editor.
 
 The length of the result list is limited by the resource
-I<filer.result-length>, which specifies its maximum length.
+B<filer.result-length>, which specifies its maximum length.
 
 In the result list, a cursor symbol is used to indicate the currently selected
-path. This symbol can be changed by using the I<filer.indicator> resource.
+path. This symbol can be changed by using the B<filer.indicator> resource.
 
 After scanning is completed the result list can be navigated using the B<up key>,
 B<down key>, B<page-up key>, and B<page-down key>.
@@ -92,7 +92,7 @@ the <escape key>.
 =head1 INSTALLATION
 
 B<URxvt> looks into multiple different directories when searching for extensions.
-These can be configured using the B<URxvt> resource I<perl-lib>.
+These can be configured using the B<URxvt> resource B<perl-lib>.
 Please see L<urxvt(1)>.
 
 If this extension should be installed into the users home directory, the
@@ -100,32 +100,32 @@ provided B<Makefile> can be used.
 Simply run C<make install-home> as the desired user.
 This installs the extension and the man page into the correct places in the users
 home directory.
-B<URxvt> should find the extension without the need to configure the I<perl-lib>
+B<URxvt> should find the extension without the need to configure the B<perl-lib>
 resource.
 
 =head1 RESOURCES
 
 =over 4
 
-=item I<launcher>
+=item B<launcher>
 
 Specifies the application which should be used to open the files.
 Prepend a C<@> symbol, if the application is a command line editor (e.g. @nano).
-The I<launcher> resource can make use of three parameters,
+The B<launcher> resource can make use of three parameters,
 referenced C<%1$s>, C<%2$s>, and C<%3$s>.
 The first one being the path to the file, the second the line number, and the third
 the column.
 Not all parameters need to be used, a value like C<@nano '%1$s'> works as well.
 The parameters can be referenced in any order and each can be referenced more than once.
-To bypass shell expansion of certain symbols, the I<launcher> arguments should be
+To bypass shell expansion of certain symbols, the B<launcher> arguments should be
 in single quotes.
 See the examples below.
 
-=item I<result-length>
+=item B<result-length>
 
 Configures the maximum length of the result list.
 
-=item I<cursor>
+=item B<cursor>
 
 Changes the cursor icon in the result list.
 
@@ -135,11 +135,11 @@ Changes the cursor icon in the result list.
 
 =over 4
 
-=item I<scan>
+=item B<scan>
 
-Scan for a maximum of I<result-length> files and present the result in a list.
+Scan for a maximum of B<result-length> files and present the result in a list.
 
-=item I<first>
+=item B<first>
 
 Scan for the most recent file and open it.
 
@@ -153,7 +153,7 @@ for each resource entry:
     URxvt.filer.result-length: 5
     URxvt.filer.cursor: ►
 
-Enable the extension and configure a keysym for the I<filer:scan> action:
+Enable the extension and configure a keysym for the B<filer:scan> action:
 
     URxvt.perl-ext-common: default,filer,...
     URxvt.keysym.M-c: filer:scan
