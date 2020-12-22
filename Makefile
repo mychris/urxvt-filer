@@ -30,6 +30,7 @@ tidy:
 	perltidy -b $(SRC)
 
 check:
+	podchecker -warnings -warnings $(SRC)
 	perlcritic --quiet --harsh --verbose 8 $(SRC)
 	perltidy -st -se -ast $(SRC) >/dev/null
 

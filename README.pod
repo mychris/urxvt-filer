@@ -17,6 +17,8 @@ This list can be navigated and the application specified by the
 I<filer.launcher> resource is used to open the desired file.
 Since scanning for files in the whole scrollback buffer would take a long time, if
 the buffer is big, only the most recent screen is scanned.
+In addition to the I<filer:scan> action, the short hand action I<filer:first> can be
+invoked to scan for files and open the first result.
 
 The scanner does not only recognize paths to files, but also those, which have a
 line and column as suffix in the following form:
@@ -105,6 +107,20 @@ Changes the cursor icon in the result list.
 
 =back
 
+=head1 ACTIONS
+
+=over 4
+
+=item I<scan>
+
+Scan for a maximum of I<result-length> files and present the result in a list.
+
+=item I<first>
+
+Scan for the most recent file and open it.
+
+=back
+
 =head1 EXAMPLE RESOURCES
 
 The following shows an example resource configuration with the default values
@@ -117,6 +133,7 @@ Enable the extension and configure a keysym for the I<filer:scan> action:
 
     URxvt.perl-ext-common: default,filer,...
     URxvt.keysym.M-c: filer:scan
+    URxvt.keysym.M-C: filer:first
 
 The following shows examples of launcher resources for different types of editors/IDEs.
 

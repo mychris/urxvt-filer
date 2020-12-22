@@ -41,6 +41,8 @@ This list can be navigated and the application specified by the
 I<filer.launcher> resource is used to open the desired file.
 Since scanning for files in the whole scrollback buffer would take a long time, if
 the buffer is big, only the most recent screen is scanned.
+In addition to the I<filer:scan> action, the short hand action I<filer:first> can be
+invoked to scan for files and open the first result.
 
 The scanner does not only recognize paths to files, but also those, which have a
 line and column as suffix in the following form:
@@ -129,6 +131,20 @@ Changes the cursor icon in the result list.
 
 =back
 
+=head1 ACTIONS
+
+=over 4
+
+=item I<scan>
+
+Scan for a maximum of I<result-length> files and present the result in a list.
+
+=item I<first>
+
+Scan for the most recent file and open it.
+
+=back
+
 =head1 EXAMPLE RESOURCES
 
 The following shows an example resource configuration with the default values
@@ -141,6 +157,7 @@ Enable the extension and configure a keysym for the I<filer:scan> action:
 
     URxvt.perl-ext-common: default,filer,...
     URxvt.keysym.M-c: filer:scan
+    URxvt.keysym.M-C: filer:first
 
 The following shows examples of launcher resources for different types of editors/IDEs.
 
@@ -262,27 +279,8 @@ sub key_pressed {
     $self->do_render;
   }
   if ( $keysym == $self->{keysym_return} ) {
-    my $launcher = $self->{launcher};
-    if ( $launcher ne "" ) {
-      my $file = $self->{files}[ $self->{selected} ];
-      my ( $path, $line, $column, undef ) = $self->split_path( $file->{base}, $file->{path} );
-      if ( $self->{launcher} =~ /%[1-3]\$s/x ) {
-        # do not use sprintf, only the parameter index syntax is documented
-        $launcher =~ s/%1\$s/$path/gx;
-        $launcher =~ s/%2\$[sd]/$line/gx;
-        $launcher =~ s/%3\$[sd]/$column/gx;
-      }
-      else {
-        $launcher .= " '${path}'";
-      }
-      if ( rindex( $launcher, '@', 0 ) == 0 ) {
-        $launcher = substr( $launcher, 1 );
-        $self->tt_write( $self->locale_encode( $launcher . "\n" ) );
-      }
-      else {
-        $self->exec_async( ( "/bin/sh", "-c", $launcher ) );
-      }
-    }
+    my $file = $self->{files}[ $self->{selected} ];
+    $self->launch($file);
     $self->do_exit;
   }
   if ( $keysym == $self->{keysym_esc} ) {
@@ -328,12 +326,19 @@ sub on_action {
       $self->do_exit;
     }
   }
+  elsif ( $action eq "first" ) {
+    $self->do_exit if ( scalar @{ $self->{files} } > 0 );
+    $self->do_open_first;
+  }
+  else {
+    $self->warn( "filer: unknown action " . $action . "\n" );
+  }
   return 1;
 }
 
 sub do_enter {
   my ($self) = @_;
-  $self->populate_files;
+  $self->populate_files( $self->{result_length} );
   return if ( scalar @{ $self->{files} } == 0 );
   $self->{selected} = 0;
   $self->enable( key_press => \&key_pressed );
@@ -355,8 +360,21 @@ sub do_exit {
   return;
 }
 
+sub do_open_first {
+  my ($self) = @_;
+  $self->populate_files(1);
+  if ( scalar $self->{files} > 0 ) {
+    my $file = $self->{files}[0];
+    # remove all files etc.
+    $self->do_exit;
+    # then launch
+    $self->launch($file);
+  }
+  return;
+}
+
 sub populate_files {
-  my ($self)             = @_;
+  my ( $self, $limit ) = @_;
   my $foreground_process = $self->proc_find_foreground_process("self");
   my $cwd                = $self->proc_cwd( $foreground_process->{pid} );
   my $row                = $self->nrow - 1;
@@ -365,7 +383,7 @@ sub populate_files {
   # $end = $self->nrow - 1 - $self->total_rows;
   # might take very long, try:
   # $ ls ; head -c $(xrdb -query |grep -i 'urxvt.*saveLines' |awk '{print $2}' |xargs echo '16 *' |bc) /dev/random |hexdump -C
-  while ( $row > $end && scalar @{ $self->{files} } < $self->{result_length} ) {
+  while ( $row > $end && scalar @{ $self->{files} } < $limit ) {
     my $line  = $self->line($row);
     my $files = $self->find_files( $line->t, $cwd );
     for my $file ( reverse @$files ) {
@@ -379,7 +397,7 @@ sub populate_files {
           overlay => undef,
           };
       }
-      last if ( scalar @{ $self->{files} } >= $self->{result_length} );
+      last if ( scalar @{ $self->{files} } >= $limit );
     }
     $row = $line->beg - 1;
   }
@@ -455,6 +473,30 @@ sub split_path {
     return ( $1, $2, $3, 1 ) if ( -f $1 );
   }
   return ( $path, 0, 0, 0 );
+}
+
+sub launch {
+  my ( $self, $file ) = @_;
+  my $launcher = $self->{launcher};
+  return if ( $launcher eq "" );
+  my ( $path, $line, $column, undef ) = $self->split_path( $file->{base}, $file->{path} );
+  if ( $self->{launcher} =~ /%[1-3]\$s/x ) {
+    # do not use sprintf, only the parameter index syntax is documented
+    $launcher =~ s/%1\$s/$path/gx;
+    $launcher =~ s/%2\$[sd]/$line/gx;
+    $launcher =~ s/%3\$[sd]/$column/gx;
+  }
+  else {
+    $launcher .= " '${path}'";
+  }
+  if ( rindex( $launcher, '@', 0 ) == 0 ) {
+    $launcher = substr( $launcher, 1 );
+    $self->tt_write( $self->locale_encode( $launcher . "\n" ) );
+  }
+  else {
+    $self->exec_async( ( "/bin/sh", "-c", $launcher ) );
+  }
+  return;
 }
 
 sub proc_stat {
