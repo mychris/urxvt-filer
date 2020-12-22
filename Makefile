@@ -12,22 +12,26 @@ SRC := filer
 all: README.pod urxvt-filer.1.gz
 
 README.pod: $(SRC)
-	podselect $? | sed -e :a -e '/^\n*$$/{$$d;N;ba' -e '}' >$@
+	podselect $? \
+	    | sed -e :a -e '/^\n*$$/{$$d;N;ba' -e '}' >$@
 
 # URxvt itself installs the man pages for the core extensions in section 1
-# with a page header of RXVT-UNICODE (see man 1 urxvt-matcher)
+# with a page header of RXVT-UNICODE (see man 1 urxvt-matcher).
+# Removes the INSTALLATION section from the man page.
 urxvt-filer.1.gz: $(SRC)
-	pod2man --utf8 --section=1 --quotes=\" --name=urxvt-filer \
-	        --date=$(GIT_DATE) --release=$(GIT_VERSION) \
-	        --center=RXVT-UNICODE $? \
+	podselect -section '^(?!.*INSTALLATION).*$$' $? \
+	    | pod2man --utf8 --section=1 --quotes=\" --name=urxvt-filer \
+	              --nourl \
+	              --date=$(GIT_DATE) --release=$(GIT_VERSION) \
+	              --center=RXVT-UNICODE \
 	    | gzip -9 >$@
 
-tidy: $(SRC)
-	perltidy -b $?
+tidy:
+	perltidy -b $(SRC)
 
-check: $(SRC)
-	perlcritic --quiet --harsh --verbose 8 $?
-	perltidy -st -se -ast $? >/dev/null
+check:
+	perlcritic --quiet --harsh --verbose 8 $(SRC)
+	perltidy -st -se -ast $(SRC) >/dev/null
 
 clean:
 	rm -f urxvt-filer.1.gz
